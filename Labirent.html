@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Labirent Oyunu</title>
+  <style>
+    html, body { margin:0; padding:0; width:100%; height:100%; background:#fff; font-family:Arial,sans-serif; }
+    .screen { display:none; width:100%; height:100%; justify-content:center; align-items:center; flex-direction:column; }
+    .screen.active { display:flex; }
+
+    h1, #stats, #messageArea, button, input, small { color:#003e99; }
+    h1 { font-size:2em; margin-bottom:20px; }
+    button { background:#003e99; color:#fff; border:none; padding:10px 20px; margin:5px; border-radius:5px; cursor:pointer; }
+    button:hover { background:#00296c; }
+    input { padding:10px; font-size:1em; width:260px; border:1px solid #ccc; border-radius:5px; }
+    small { font-size:0.75em; margin-top:10px; }
+
+    #stats { display:flex; justify-content:space-around; width:600px; margin-bottom:10px; font-size:1.1em; }
+    #gameArea { display:flex; }
+    #gameContainer { position:relative; }
+    #gameCanvas { background:#e0e0e0; border:2px solid #003e99; }
+    #messageArea { height:24px; margin-top:10px; text-align:center; font-weight:bold; }
+
+    #productPanel { margin-left:20px; }
+    #productPanel table { border-collapse:collapse; }
+    #productPanel th, #productPanel td { border:1px solid #ccc; padding:4px 8px; font-size:0.9em; }
+    .taken { text-decoration:line-through; color:#888; }
+
+    #highScoreTable { border-collapse:collapse; width:90%; margin-bottom:20px; }
+    #highScoreTable th, #highScoreTable td { border:1px solid #ccc; padding:8px; text-align:center; }
+    #highScoreTable tr:nth-child(even) { background:#f9f9f9; }
+  </style>
+</head>
+<body>
+
+  <!-- 1. İsim Giriş Ekranı -->
+  <div id="nameScreen" class="screen active">
+    <h1>Akdeniz Bölge</h1>
+    <input type="text" id="playerNameInput" maxlength="30" placeholder="Adınız Soyadınız">
+    <button id="continueBtn">Devam Et</button>
+    <small>Created by Murat Özgür Ünal</small>
+  </div>
+
+  <!-- 2. Segment Seçim Ekranı -->
+  <div id="segmentScreen" class="screen">
+    <h1>Segment Seçin</h1>
+    <div id="segmentButtons">
+      <button data-seg="kobi">KOBİ-OBİ</button>
+      <button data-seg="isletme">İşletme</button>
+      <button data-seg="blue">Blue Class</button>
+      <button data-seg="bireysel">Bireysel Bankacılık</button>
+      <button data-seg="ticari">Ticari</button>
+      <button data-seg="sube">Şube Müdürü</button>
+    </div>
+    <button id="backToName">Geri</button>
+  </div>
+
+  <!-- 3. Oyun Ekranı -->
+  <div id="gameScreen" class="screen">
+    <h1 id="gameTitle"></h1>
+    <div id="stats">
+      <div id="scoreDisplay">Puan: 0 / 100</div>
+      <div id="remainingDisplay">Kalan Ürün: 0</div>
+      <div id="timerDisplay">Süre: 08:00</div>
+    </div>
+    <div id="gameArea">
+      <div id="gameContainer">
+        <canvas id="gameCanvas" width="600" height="600"></canvas>
+        <div id="messageArea"></div>
+      </div>
+      <aside id="productPanel">
+        <table id="productTable">
+          <tr><th>Ürün</th><th>Ad</th><th>Puan</th></tr>
+        </table>
+      </aside>
+    </div>
+  </div>
+
+  <!-- 4. Yüksek Puanlar Ekranı -->
+  <div id="scoreScreen" class="screen">
+    <h1>Yüksek Puanlar</h1>
+    <table id="highScoreTable">
+      <tr>
+        <th>Sıra</th><th>İsim</th><th>Puan</th><th>Süre</th><th>Segment</th><th>Durum</th>
+      </tr>
+    </table>
+    <button id="playAgainBtn">Tekrar Oyna</button>
+    <button id="mainMenuBtn">Ana Menü</button>
+  </div>
+
+  <script>
+  (function(){
+    // ekran yönetimi
+    const screens = {
+      name:   document.getElementById('nameScreen'),
+      segment:document.getElementById('segmentScreen'),
+      game:   document.getElementById('gameScreen'),
+      score:  document.getElementById('scoreScreen')
+    };
+    function showScreen(key){
+      Object.values(screens).forEach(s=>s.classList.remove('active'));
+      screens[key].classList.add('active');
+    }
+
+    // segment adları & ürün listesi
+    const displayNames = {
+      kobi:'KOBİ-OBİ', isletme:'İşletme', blue:'Blue Class',
+      bireysel:'Bireysel Bankacılık', ticari:'Ticari'
+    };
+    const segmentProducts = {
+      kobi:[
+        {emoji:'💰',name:'Toplam Gelir',points:15},{emoji:'🏦',name:'TL Vadesiz',points:15},
+        {emoji:'📈',name:'TL Vadeli',points:10},{emoji:'💵',name:'TL Nakit Kredi',points:10},
+        {emoji:'😊',name:'Verimli Müşteri',points:10},{emoji:'🤝',name:'Aktif Müşteri',points:5},
+        {emoji:'📉',name:'NPL Rasyosu',points:5},{emoji:'🏪',name:'Üye İşyeri',points:10},
+        {emoji:'🌍',name:'Dış Ticaret',points:10},{emoji:'🧾',name:'DBS',points:5},
+        {emoji:'✉️',name:'Tahsil Çek Adedi',points:5}
+      ],
+      isletme:[
+        {emoji:'💰',name:'Toplam Gelir',points:15},{emoji:'🏦',name:'TL Vadesiz',points:15},
+        {emoji:'📈',name:'TL Vadeli',points:10},{emoji:'📊',name:'TTK ve ETH',points:15},
+        {emoji:'😊',name:'Verimli Müşteri',points:10},{emoji:'💳',name:'Ticari Kart',points:5},
+        {emoji:'🏪',name:'Üye İşyeri',points:10},{emoji:'☂️',name:'Sigorta & BES',points:10},
+        {emoji:'➕',name:'Yeni Müşteri',points:10}
+      ],
+      blue:[
+        {emoji:'💰',name:'Net Gelir',points:15},{emoji:'📈',name:'TL Vadeli',points:15},
+        {emoji:'👥',name:'Mudi Adedi',points:5},{emoji:'♾️',name:'Sınırsız Hesap',points:5},
+        {emoji:'🏦',name:'TL Vadesiz',points:10},{emoji:'🏠',name:'Konut,Taşıt,BİK',points:10},
+        {emoji:'🛡️',name:'Toplam Sigorta Primi',points:5},{emoji:'🐷',name:'BES Primi',points:5},
+        {emoji:'👤',name:'BES Adedi',points:5},{emoji:'😊',name:'Verimli Müşteri',points:5},
+        {emoji:'💳',name:'Kredi Kartı',points:5},{emoji:'👴',name:'Emekli Bankacılığı',points:5},
+        {emoji:'✨',name:'Nitelikli Fon',points:10}  // 10 puan
+      ],
+      bireysel:[
+        {emoji:'💳',name:'Kredi Kartı',points:10},{emoji:'🛒',name:'Tüketici Kredileri',points:15},
+        {emoji:'📈',name:'Vadeli Mevduat',points:10},{emoji:'♾️',name:'Sınırsız Hesap',points:5},
+        {emoji:'☂️',name:'Sigorta & BES',points:15},{emoji:'📱',name:'Günlük Bankacılık',points:10},
+        {emoji:'💸',name:'Esnek Hesap',points:10},{emoji:'➕',name:'Yeni Müşteri',points:5},
+        {emoji:'👴',name:'Emekli Bankacılığı',points:10},{emoji:'🧑‍💼',name:'Maaş/Emekli Verimli',points:10}
+      ],
+      ticari:[
+        {emoji:'💰',name:'Toplam Gelir',points:20},{emoji:'🏦',name:'TL Vadesiz',points:15},
+        {emoji:'📈',name:'TL Vadeli',points:5},{emoji:'💵',name:'Nakit Kredi',points:15},
+        {emoji:'🏦',name:'Gayri Nakit Kredi',points:10},{emoji:'😊',name:'Verimli Müşteri',points:10},
+        {emoji:'📉',name:'NPL Rasyosu',points:5},{emoji:'💼',name:'Nakit Yönetimi',points:10},
+        {emoji:'🌍',name:'Dış Ticaret',points:10}
+      ]
+    };
+
+    let playerName='', currentSeg='', grid, items=[], score=0, timerInterval;
+    const canvas = document.getElementById('gameCanvas'),
+          ctx    = canvas.getContext('2d'),
+          cellSize = canvas.width/51,
+          player   = {r:1,c:1};
+
+    // 1) İsim ekranı
+    document.getElementById('continueBtn').addEventListener('click',()=>{
+      const v=document.getElementById('playerNameInput').value.trim();
+      if(!v){ alert('🔔 Lütfen isim girin'); return; }
+      playerName=v; showScreen('segment');
+    });
+    document.getElementById('backToName').addEventListener('click',()=>showScreen('name'));
+
+    // 2) Segment seçimi
+    document.querySelectorAll('#segmentButtons button').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const seg=btn.getAttribute('data-seg');
+        if(seg==='sube'){ alert('🚨 Önce tüm segmentleri bitirmelisin!'); return; }
+        currentSeg=seg;
+        document.getElementById('gameTitle').innerText=
+          `${displayNames[seg]} Segment Labirent Oyunu`;
+        showScreen('game'); initGame();
+      });
+    });
+
+    // 3) Oyun başlat
+    function initGame(){
+      score=0; player.r=1; player.c=1;
+      grid=generateMaze(51,51);
+      addLoops(grid,0.01);
+      grid[50][50]=1; grid[49][50]=1; grid[50][49]=1;
+      items=placeItems(grid,segmentProducts[currentSeg]);
+      buildProductTable(); updateStats(); drawAll(); startTimer(480);
+      document.addEventListener('keydown',handleKey);
+    }
+
+    // Maze oluşturma
+    function generateMaze(rows,cols){
+      const g=Array.from({length:rows},()=>Array(cols).fill(0)), stack=[[1,1]];
+      g[1][1]=1; const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+      while(stack.length){
+        const [r,c]=stack[stack.length-1], nbr=[];
+        dirs.forEach(([dr,dc])=>{
+          const nr=r+dr*2,nc=c+dc*2;
+          if(nr>0&&nr<rows-1&&nc>0&&nc<cols-1&&g[nr][nc]===0)
+            nbr.push([nr,nc,dr,dc]);
+        });
+        if(nbr.length){
+          const [nr,nc,dr,dc]=nbr[Math.floor(Math.random()*nbr.length)];
+          g[r+dr][c+dc]=1; g[nr][nc]=1; stack.push([nr,nc]);
+        } else stack.pop();
+      }
+      return g;
+    }
+
+    // Döngü ekleme
+    function addLoops(g,perc){
+      const rows=g.length, cols=g[0].length, target=Math.floor(rows*cols*perc);
+      let removed=0, attempts=0;
+      while(removed<target && attempts<target*5){
+        const r=Math.floor(Math.random()*(rows-2))+1,
+              c=Math.floor(Math.random()*(cols-2))+1;
+        if(g[r][c]===0){
+          let adj=0; if(g[r-1][c])adj++; if(g[r+1][c])adj++;
+          if(g[r][c-1])adj++; if(g[r][c+1])adj++;
+          if(adj>=2){ g[r][c]=1; removed++; }
+        }
+        attempts++;
+      }
+    }
+
+    // Ürün yerleştirme
+    function placeItems(g,prods){
+      const rows=g.length, cols=g[0].length, minDistSq=Math.floor(rows/8)**2, placed=[];
+      prods.forEach(p=>{
+        for(let i=0;i<1000;i++){
+          const r=Math.floor(Math.random()*rows), c=Math.floor(Math.random()*cols);
+          if(g[r][c]===1 && !(r===1&&c===1) && !(r===rows-2&&c===cols-2)){
+            if(placed.every(q=>{ const dr=r-q.r, dc=c-q.c; return dr*dr+dc*dc>=minDistSq;})){
+              placed.push({r,c,...p}); break;
+            }
+          }
+        }
+      });
+      return placed;
+    }
+
+    // Çizim
+    function drawAll(){ drawMaze(); drawItems(); drawPlayer(); }
+    function drawMaze(){
+      for(let r=0;r<51;r++)for(let c=0;c<51;c++){
+        ctx.fillStyle = grid[r][c]? '#fff':'#0a1a33';
+        ctx.fillRect(c*cellSize, r*cellSize, cellSize, cellSize);
+      }
+      ctx.save();
+      ctx.font=`${cellSize}px serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('🚪', (50+0.5)*cellSize,(50+0.5)*cellSize);
+      ctx.restore();
+    }
+    function drawItems(){
+      items.forEach(i=>{
+        ctx.save(); ctx.shadowColor='yellow'; ctx.shadowBlur=12;
+        ctx.font=`${cellSize}px serif`;
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(i.emoji,(i.c+0.5)*cellSize,(i.r+0.5)*cellSize);
+        ctx.restore();
+      });
+    }
+    function drawPlayer(){
+      drawMaze(); drawItems();
+      ctx.save();
+      ctx.font=`${cellSize*1.5}px serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('🕴️',(player.c+0.5)*cellSize,(player.r+0.5)*cellSize);
+      ctx.restore();
+    }
+
+    // Hareket
+    function handleKey(e){
+      const moves={ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1],w:[-1,0],s:[1,0],a:[0,-1],d:[0,1]};
+      const mv=moves[e.key]; if(!mv) return;
+      const nr=player.r+mv[0], nc=player.c+mv[1];
+      if(nr<0||nr>50||nc<0||nc>50||!grid[nr][nc]) return;
+      player.r=nr; player.c=nc; checkCell(); drawPlayer();
+    }
+    function checkCell(){
+      const idx=items.findIndex(i=>i.r===player.r&&i.c===player.c);
+      if(idx>-1){
+        const it=items.splice(idx,1)[0];
+        score+=it.points; updateStats();
+        document.getElementById('messageArea').innerText=
+          `${it.emoji} ${it.name} toplandı, +${it.points} puan`;
+        updateProductTable(it.name);
+      }
+      if(player.r===50&&player.c===50){
+        if(score>=100) finish('Kazandınız!');
+        else document.getElementById('messageArea').innerText='Çıkış için 100 puan tamamlayın';
+      }
+    }
+
+    // İstatistik & tablo
+    function updateStats(){
+      document.getElementById('scoreDisplay').innerText=`Puan: ${score} / 100`;
+      document.getElementById('remainingDisplay').innerText=`Kalan Ürün: ${items.length}`;
+    }
+    function buildProductTable(){
+      const tbl=document.getElementById('productTable');
+      tbl.querySelectorAll('tr:not(:first-child)').forEach(r=>r.remove());
+      segmentProducts[currentSeg].forEach(p=>{
+        const tr=document.createElement('tr');
+        tr.id=`prod-${p.name.replace(/\s/g,'')}`;
+        tr.innerHTML=`<td>${p.emoji}</td><td>${p.name}</td><td>${p.points}</td>`;
+        tbl.appendChild(tr);
+      });
+    }
+    function updateProductTable(name){
+      const row=document.getElementById(`prod-${name.replace(/\s/g,'')}`);
+      if(row) row.classList.add('taken');
+    }
+
+    // Timer & sonuç
+    function startTimer(sec){
+      clearInterval(timerInterval); let t=sec;
+      timerInterval=setInterval(()=>{
+        t--; const m=String(Math.floor(t/60)).padStart(2,'0'), s=String(t%60).padStart(2,'0');
+        document.getElementById('timerDisplay').innerText=`Süre: ${m}:${s}`;
+        if(t<=0){ clearInterval(timerInterval); finish('Süre doldu'); }
+      },1000);
+    }
+
+    function finish(msg){
+      clearInterval(timerInterval);
+      document.removeEventListener('keydown',handleKey);
+
+      // kayıt oluştur
+      const status = msg==='Kazandınız!' ? 'Kazandınız!' : 'Kaybettiniz!';
+      const rec = {
+        name: playerName,
+        score,
+        time: document.getElementById('timerDisplay').innerText.slice(6),
+        segment: displayNames[currentSeg],
+        status
+      };
+      let hs = JSON.parse(localStorage.getItem('highScores')||'[]');
+      hs.push(rec);
+      hs.sort((a,b)=> b.score-a.score || a.time.localeCompare(b.time));
+      hs=hs.slice(0,10);
+      localStorage.setItem('highScores',JSON.stringify(hs));
+
+      // tabloya yaz
+      const tbl = document.getElementById('highScoreTable');
+      tbl.querySelectorAll('tr:not(:first-child)').forEach(r=>r.remove());
+      hs.forEach((r,i)=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML = `
+          <td>${i+1}</td>
+          <td>${r.name}</td>
+          <td>${r.score}</td>
+          <td>${r.time}</td>
+          <td>${r.segment}</td>
+          <td>${r.status}</td>
+        `;
+        tbl.appendChild(tr);
+      });
+
+      showScreen('score');
+    }
+
+    document.getElementById('playAgainBtn').addEventListener('click',()=>location.reload());
+    document.getElementById('mainMenuBtn').addEventListener('click',()=>showScreen('name'));
+  })();
+  </script>
+</body>
+</html>
